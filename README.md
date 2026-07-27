@@ -231,6 +231,50 @@ this problem, which is why every competitive method here is lag-based.
 (0.710) — the two extreme winter-peaked series, where day-to-day persistence is
 strong. On the other four it ranked last. The top two positions never moved.
 
+## Prediction intervals
+
+Point forecasts are not what a grid operator needs. The reserve capacity that
+must be procured — and paid for — is a function of uncertainty, not of the
+point estimate. Split conformal prediction is applied identically to every
+method, with residual quantiles computed **per lead time** (hour 1 ahead is
+easier than hour 23, so a pooled quantile would be too wide early and too
+narrow late).
+
+| Model | Coverage | Width (% of load) | Pinball | Point MASE |
+|---|---|---|---|---|
+| xgboost_lags | 79.1% | **8.5%** | **281** | 0.509 |
+| ridge_lags | 79.5% | 11.2% | 376 | 0.682 |
+| seasonal_naive_168h | 78.3% | 17.6% | 624 | 1.039 |
+
+Nominal coverage is 80%; all three land within 1.7 points. Because coverage is
+comparable, the widths are comparable: **XGBoost achieves the same reliability
+as seasonal naive at half the interval width** — same confidence, half the
+reserve capacity.
+
+### The calibration set has to be held out, and the failure is instructive
+
+A first implementation calibrated on data the model had already been fit on.
+The coverage error then tracked model flexibility almost perfectly:
+
+| Model | Held-out calibration | In-sample calibration | Error |
+|---|---|---|---|
+| seasonal_naive_168h (nothing fitted) | 78.3% | 78.3% | 0.0 |
+| ridge_lags (regularised linear) | 79.5% | 79.0% | −0.5 |
+| xgboost_lags (flexible trees) | 79.1% | **58.5%** | **−20.6** |
+
+In-sample residuals understate real error, and they understate it most for the
+most flexible model. XGBoost produced intervals half as wide (4.8% of load
+against 8.5%) and the best pinball loss on the flawed run — it won the metric
+by cheating on it. On NO, coverage fell to 51%: a coin flip sold as 80%
+confidence.
+
+For an operator this is not a scoring artifact. An interval advertised at 80%
+that delivers 58% means being under-reserved two days in five.
+
+Fixing it costs the point forecast about two months of training data, and the
+point MASE barely moved (0.509 against 0.503 in the main benchmark). That is a
+cheap price for an interval that means what it says. `--naive-calibration`
+reproduces the flawed behaviour for comparison.
 ---
 
 ## What this does not show
